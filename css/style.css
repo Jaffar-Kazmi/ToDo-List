@@ -463,4 +463,92 @@ footer {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* ... rest of your CSS ... */
+/* Sidebar Categories Styling */
+.category-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 20px 0;
+}
+
+.category-list li {
+    margin-bottom: 5px;
+}
+
+.category-list a {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    text-decoration: none;
+    color: #333;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    position: relative;
+}
+
+.category-list a:hover {
+    background-color: #f5f5f5;
+}
+
+.category-list a.active {
+    background-color: #4a6fa5;
+    color: white;
+}
+
+.category-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+    display: inline-block;
+}
+
+/* Category actions (edit/delete buttons) */
+.category-actions {
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.category-list a:hover .category-actions {
+    opacity: 1;
+}
+
+.btn-edit-category,
+.btn-delete-category {
+    background: none;
+    border: none;
+    color: #666;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 12px;
+    margin-left: 2px;
+    border-radius: 2px;
+    transition: color 0.2s;
+}
+
+.btn-edit-category:hover {
+    color: #4a6fa5;
+}
+
+.btn-delete-category:hover {
+    color: #dc3545;
+}
+
+/* Active category styling */
+.category-list a.active .btn-edit-category,
+.category-list a.active .btn-delete-category {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.category-list a.active .btn-edit-category:hover,
+.category-list a.active .btn-delete-category:hover {
+    color: white;
+}
+
+/* Empty state styling */
+.category-list li em {
+    color: #999;
+    font-style: italic;
+    padding: 8px 12px;
+    display: block;
+}

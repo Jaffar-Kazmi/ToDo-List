@@ -105,7 +105,6 @@ async function fetchTasks() {
     }
 }
 
-
 async function saveTask(taskData) {
   try {
     console.log("Saving task:", taskData);
@@ -256,46 +255,95 @@ function renderTasks(tasks) {
 
 // Categories
 async function fetchCategories() {
-  try {
-    console.log("Fetching categories from API...");
-    const response = await fetch("api/categories.php");
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+        console.log("Fetching categories from API...");
+        const response = await fetch("api/categories.php", {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: {
+                'Cache-Control': 'no-cache'
+            }
+        });
+        
+        console.log("Categories response status:", response.status);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const text = await response.text();
+        console.log("Categories raw response:", text);
+        
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.error("Failed to parse categories JSON:", text);
+            throw new Error("Invalid JSON response from categories API");
+        }
+        
+        console.log("Categories parsed response:", data);
+        
+        if (data.success) {
+            return data.data || [];
+        } else {
+            console.error("Categories API error:", data.error);
+            return [];
+        }
+    } catch (error) {
+        console.error("Error fetching categories:", error);
+        return [];
     }
-    
-    const data = await response.json();
-    console.log("Categories API response:", data);
-    
-    if (data.success) {
-      return data.data || [];
-    } else {
-      console.error("Error fetching categories:", data.error);
-      return [];
-    }
-  } catch (error) {
-    console.error("Error fetching categories:", error);
-    return [];
-  }
 }
 
 async function saveCategory(categoryData) {
   try {
+    console.log("Saving category:", categoryData);
+    console.log("Category data as JSON:", JSON.stringify(categoryData));
+    
+    // Validate input data
+    if (!categoryData.name || categoryData.name.trim() === '') {
+      throw new Error('Category name is required');
+    }
+    
     const response = await fetch("api/categories.php", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
+      credentials: 'same-origin', // Include session cookies
       body: JSON.stringify(categoryData),
     });
     
+    console.log("Save category response status:", response.status);
+    console.log("Response headers:", [...response.headers.entries()]);
+    
+    const textResponse = await response.text();
+    console.log("Raw server response:", textResponse);
+    
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      console.error("HTTP error! Status:", response.status);
+      console.error("Error response body:", textResponse);
+      
+      // Try to parse error response
+      try {
+        const errorData = JSON.parse(textResponse);
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      } catch (parseError) {
+        throw new Error(`HTTP error! status: ${response.status}. Response: ${textResponse}`);
+      }
     }
     
-    return await response.json();
+    try {
+      const data = JSON.parse(textResponse);
+      console.log("Parsed response:", data);
+      return data;
+    } catch (e) {
+      console.error("Invalid JSON response:", textResponse);
+      return { success: false, error: "Invalid server response: " + textResponse };
+    }
   } catch (error) {
-    console.error("Error:", error);
+    console.error("Error saving category:", error);
     return { success: false, error: error.message };
   }
 }
@@ -430,12 +478,69 @@ async function loadTaskData(taskId) {
   }
 }
 
-function openCategoryModal() {
+async function loadCategoryData(categoryId) {
+  try {
+    console.log("Loading category data for ID:", categoryId);
+    
+    const categories = await fetchCategories();
+    const category = categories.find(c => c.category_id == categoryId);
+    
+    if (category) {
+      console.log("Found category data:", category);
+      
+      // Fill form fields
+      const categoryIdField = document.getElementById("category-id");
+      const categoryNameField = document.getElementById("category-name");
+      const categoryColorField = document.getElementById("category-color");
+      
+      if (categoryIdField) {
+        categoryIdField.value = category.category_id;
+      }
+      if (categoryNameField) {
+        categoryNameField.value = category.name;
+      }
+      if (categoryColorField) {
+        categoryColorField.value = category.color || '#4a6fa5';
+      }
+      
+      console.log("Category form populated with data");
+    } else {
+      console.error("Category not found with ID:", categoryId);
+      alert("Category not found");
+      closeCategoryModal();
+    }
+  } catch (error) {
+    console.error("Error loading category data:", error);
+    alert("Error loading category data");
+    closeCategoryModal();
+  }
+}
+
+function openCategoryModal(categoryId = null) {
+  console.log("Opening category modal for categoryId:", categoryId);
+  
   const modal = document.getElementById("category-modal");
   const form = document.getElementById("category-form");
+  const modalTitle = document.getElementById("category-modal-title");
   
   if (form) {
     form.reset();
+  }
+  
+  // Clear category ID field
+  const categoryIdField = document.getElementById("category-id");
+  if (categoryIdField) {
+    categoryIdField.value = categoryId || "";
+  }
+  
+  // Set modal title
+  if (modalTitle) {
+    modalTitle.textContent = categoryId ? "Edit Category" : "Add New Category";
+  }
+  
+  // If editing, load category data
+  if (categoryId) {
+    loadCategoryData(categoryId);
   }
   
   if (modal) {
@@ -491,41 +596,73 @@ async function loadTasks() {
 }
 
 async function loadCategories() {
-  try {
-    console.log("Loading categories...");
-    const categories = await fetchCategories();
-    console.log("Fetched categories:", categories);
-    
-    // Update category dropdown in task modal
-    const categorySelect = document.getElementById("task-categories");
-    if (categorySelect && categories) {
-      categorySelect.innerHTML = '';
-      categories.forEach(category => {
-        const option = document.createElement('option');
-        option.value = category.category_id;
-        option.textContent = category.name;
-        categorySelect.appendChild(option);
-      });
+    try {
+        console.log("Loading categories...");
+        const categories = await fetchCategories();
+        console.log("Fetched categories:", categories);
+        
+        if (!Array.isArray(categories)) {
+            console.error("Categories is not an array:", categories);
+            return;
+        }
+        
+        // Update category dropdown in task modal
+        const categorySelect = document.getElementById("task-categories");
+        if (categorySelect) {
+            console.log("Updating task modal category dropdown...");
+            categorySelect.innerHTML = '';
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category.category_id;
+                option.textContent = category.name;
+                categorySelect.appendChild(option);
+            });
+            console.log("Task modal categories updated");
+        } else {
+            console.log("Task categories select not found");
+        }
+        
+        // Update sidebar categories
+        const userCategoriesElement = document.getElementById("user-categories");
+        if (userCategoriesElement) {
+            console.log("Updating sidebar categories...");
+            userCategoriesElement.innerHTML = '';
+            
+            if (categories.length === 0) {
+                userCategoriesElement.innerHTML = '<li><em>No custom categories yet</em></li>';
+            } else {
+                categories.forEach(category => {
+                    console.log("Adding category to sidebar:", category);
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <a href="#" data-category="${category.category_id}" class="category-link">
+                            <span class="category-color" style="background-color: ${category.color || '#4a6fa5'}"></span>
+                            ${escapeHtml(category.name)}
+                            <span class="category-actions">
+                                <button class="btn-edit-category" data-category-id="${category.category_id}" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-delete-category" data-category-id="${category.category_id}" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </span>
+                        </a>
+                    `;
+                    userCategoriesElement.appendChild(li);
+                });
+                
+                // Add event listeners for category actions
+                addCategoryEventListeners();
+            }
+            
+            console.log("Sidebar categories updated with", categories.length, "categories");
+        } else {
+            console.error("User categories element not found!");
+        }
+        
+    } catch (error) {
+        console.error("Error loading categories:", error);
     }
-    
-    // Update sidebar categories
-    const userCategoriesElement = document.getElementById("user-categories");
-    if (userCategoriesElement && categories) {
-      userCategoriesElement.innerHTML = '';
-      categories.forEach(category => {
-        const li = document.createElement('li');
-        li.innerHTML = `
-          <a href="#" data-category="${category.category_id}">
-            <span class="category-color" style="background-color: ${category.color || '#4a6fa5'}"></span>
-            ${escapeHtml(category.name)}
-          </a>
-        `;
-        userCategoriesElement.appendChild(li);
-      });
-    }
-  } catch (error) {
-    console.error("Error loading categories:", error);
-  }
 }
 
 async function updateTaskStatistics() {
@@ -611,6 +748,65 @@ document
       alert("Failed to save task");
     }
   });
+
+// Add event listeners for category buttons
+function addCategoryEventListeners() {
+    // Category filter links
+    document.querySelectorAll(".category-link").forEach((link) => {
+        link.addEventListener("click", (e) => {
+            e.preventDefault();
+            const categoryId = e.currentTarget.getAttribute("data-category");
+            console.log("Filtering by category:", categoryId);
+            // You can implement category filtering here
+        });
+    });
+
+    // Edit category buttons
+    document.querySelectorAll(".btn-edit-category").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const categoryId = e.currentTarget.getAttribute("data-category-id");
+            console.log("Edit category button clicked for ID:", categoryId);
+            openCategoryModal(categoryId); // Pass the category ID for editing
+        });
+    });
+
+    // Delete category buttons
+    document.querySelectorAll(".btn-delete-category").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const categoryId = e.currentTarget.getAttribute("data-category-id");
+            
+            if (confirm("Are you sure you want to delete this category?")) {
+                console.log("Delete category:", categoryId);
+                const result = await deleteCategory(categoryId);
+                if (result.success) {
+                    await loadCategories();
+                } else {
+                    alert("Error deleting category: " + result.error);
+                }
+            }
+        });
+    });
+}
+
+// Load categories immediately when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("DOM loaded, loading categories...");
+    setTimeout(async function() {
+        await loadCategories();
+    }, 200);
+});
+
+// Also load categories when window is fully loaded
+window.addEventListener('load', function() {
+    console.log("Window loaded, loading categories...");
+    setTimeout(async function() {
+        await loadCategories();
+    }, 200);
+});
 
 // Add Category Button
 addCategoryBtn?.addEventListener("click", () => {
