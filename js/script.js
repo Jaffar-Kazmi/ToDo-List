@@ -61,6 +61,18 @@ function escapeHtml(unsafe) {
 // API Calls
 // ============================
 
+// ============================
+// Search and Filter Functions
+// ============================
+
+let allTasks = []; // Store all tasks for filtering
+let currentFilters = {
+    search: '',
+    priority: '',
+    category: 'all',
+    status: 'all'
+};
+
 // TASKS
 async function fetchTasks() {
     try {
@@ -194,6 +206,73 @@ async function toggleTaskComplete(taskId) {
   }
 }
 
+// Apply all filters
+function applyFilters() {
+    console.log("Applying filters:", currentFilters);
+    
+    let filteredTasks = [...allTasks];
+    
+    // Apply search filter
+    if (currentFilters.search.trim()) {
+        const searchTerm = currentFilters.search.toLowerCase().trim();
+        filteredTasks = filteredTasks.filter(task => 
+            task.title.toLowerCase().includes(searchTerm) ||
+            (task.description && task.description.toLowerCase().includes(searchTerm)) ||
+            (task.categories && task.categories.some(cat => 
+                cat.name.toLowerCase().includes(searchTerm)
+            ))
+        );
+    }
+    
+    // Apply priority filter
+    if (currentFilters.priority) {
+        filteredTasks = filteredTasks.filter(task => 
+            task.priority_id == currentFilters.priority
+        );
+    }
+    
+    // Apply category filter
+    if (currentFilters.category !== 'all') {
+        switch (currentFilters.category) {
+            case 'today':
+                const today = new Date().toISOString().split('T')[0];
+                filteredTasks = filteredTasks.filter(task => 
+                    task.due_date === today
+                );
+                break;
+            case 'upcoming':
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                filteredTasks = filteredTasks.filter(task => 
+                    task.due_date && new Date(task.due_date) >= tomorrow
+                );
+                break;
+            case 'overdue':
+                const yesterday = new Date();
+                yesterday.setDate(yesterday.getDate() - 1);
+                filteredTasks = filteredTasks.filter(task => 
+                    task.due_date && new Date(task.due_date) < new Date() && !task.completed
+                );
+                break;
+            case 'completed':
+                filteredTasks = filteredTasks.filter(task => task.completed);
+                break;
+            default:
+                // Custom category filter
+                if (!isNaN(currentFilters.category)) {
+                    filteredTasks = filteredTasks.filter(task => 
+                        task.categories && task.categories.some(cat => 
+                            cat.category_id == currentFilters.category
+                        )
+                    );
+                }
+        }
+    }
+    
+    console.log(`Filtered ${allTasks.length} tasks to ${filteredTasks.length} tasks`);
+    renderTasks(filteredTasks);
+    updateCategoryTitle();
+}
 
 function renderTasks(tasks) {
     console.log("renderTasks called with:", tasks);
@@ -369,6 +448,45 @@ async function deleteCategory(categoryId) {
   }
 }
 
+// Update the category title based on current filter
+function updateCategoryTitle() {
+    const titleElement = document.getElementById("current-category-title");
+    if (!titleElement) return;
+    
+    let title = "All Tasks";
+    
+    switch (currentFilters.category) {
+        case 'all':
+            title = "All Tasks";
+            break;
+        case 'today':
+            title = "Today's Tasks";
+            break;
+        case 'upcoming':
+            title = "Upcoming Tasks";
+            break;
+        case 'overdue':
+            title = "Overdue Tasks";
+            break;
+        case 'completed':
+            title = "Completed Tasks";
+            break;
+        default:
+            // Check if it's a custom category
+            if (!isNaN(currentFilters.category)) {
+                // Find category name
+                const categoryLinks = document.querySelectorAll('.category-link[data-category]');
+                categoryLinks.forEach(link => {
+                    if (link.getAttribute('data-category') == currentFilters.category) {
+                        title = link.textContent.trim();
+                    }
+                });
+            }
+    }
+    
+    titleElement.textContent = title;
+}
+
 // Stats
 async function fetchStats() {
   try {
@@ -404,6 +522,66 @@ async function fetchStats() {
   }
 }
 
+// Filters
+// Search functionality
+function handleSearch() {
+    const searchInput = document.getElementById("search-input");
+    if (searchInput) {
+        currentFilters.search = searchInput.value;
+        applyFilters();
+    }
+}
+
+// Priority filter functionality
+function handlePriorityFilter() {
+    const priorityFilter = document.getElementById("priority-filter");
+    if (priorityFilter) {
+        currentFilters.priority = priorityFilter.value;
+        applyFilters();
+    }
+}
+
+// Category filter functionality
+function handleCategoryFilter(categoryId) {
+    currentFilters.category = categoryId;
+    
+    // Update active category link
+    document.querySelectorAll('.category-list a').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    const activeLink = document.querySelector(`[data-category="${categoryId}"]`);
+    if (activeLink) {
+        activeLink.classList.add('active');
+    }
+    
+    applyFilters();
+}
+
+// Clear all filters
+function clearFilters() {
+    currentFilters = {
+        search: '',
+        priority: '',
+        category: 'all',
+        status: 'all'
+    };
+    
+    // Reset UI elements
+    const searchInput = document.getElementById("search-input");
+    const priorityFilter = document.getElementById("priority-filter");
+    
+    if (searchInput) searchInput.value = '';
+    if (priorityFilter) priorityFilter.value = '';
+    
+    // Reset active category
+    document.querySelectorAll('.category-list a').forEach(link => {
+        link.classList.remove('active');
+    });
+    document.querySelector('[data-category="all"]')?.classList.add('active');
+    
+    applyFilters();
+}
 // ============================
 // UI Utility Functions
 // ============================
@@ -577,7 +755,8 @@ async function loadTasks() {
         console.log("Fetched tasks in loadTasks:", tasks);
         
         if (Array.isArray(tasks)) {
-            renderTasks(tasks);
+            allTasks = tasks; // Store all tasks for filtering
+            applyFilters(); // Apply current filters
             console.log("Tasks loaded and rendered successfully");
         } else {
             console.error("Tasks is not an array:", tasks);
@@ -937,6 +1116,94 @@ function addTaskEventListeners() {
     });
 }
 
+// ============================
+// Event Listeners for Search and Filter
+// ============================
+
+// Search input event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById("search-input");
+    const searchBtn = document.getElementById("search-btn");
+    const priorityFilter = document.getElementById("priority-filter");
+    
+    if (searchInput) {
+        // Search on input (real-time search)
+        searchInput.addEventListener('input', handleSearch);
+        
+        // Search on Enter key
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                handleSearch();
+            }
+        });
+    }
+    
+    if (searchBtn) {
+        searchBtn.addEventListener('click', handleSearch);
+    }
+    
+    if (priorityFilter) {
+        priorityFilter.addEventListener('change', handlePriorityFilter);
+    }
+    
+    // Category filter event listeners
+    document.addEventListener('click', function(e) {
+        if (e.target.matches('[data-category]') || e.target.closest('[data-category]')) {
+            e.preventDefault();
+            const link = e.target.matches('[data-category]') ? e.target : e.target.closest('[data-category]');
+            const categoryId = link.getAttribute('data-category');
+            handleCategoryFilter(categoryId);
+        }
+    });
+});
+
+// Enhanced category event listeners
+function addCategoryEventListeners() {
+    // Category filter links
+    document.querySelectorAll(".category-link").forEach((link) => {
+        link.addEventListener("click", (e) => {
+            e.preventDefault();
+            const categoryId = e.currentTarget.getAttribute("data-category");
+            console.log("Filtering by category:", categoryId);
+            handleCategoryFilter(categoryId);
+        });
+    });
+
+    // Edit category buttons
+    document.querySelectorAll(".btn-edit-category").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const categoryId = e.currentTarget.getAttribute("data-category-id");
+            console.log("Edit category button clicked for ID:", categoryId);
+            openCategoryModal(categoryId);
+        });
+    });
+
+    // Delete category buttons
+    document.querySelectorAll(".btn-delete-category").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const categoryId = e.currentTarget.getAttribute("data-category-id");
+            
+            if (confirm("Are you sure you want to delete this category?")) {
+                console.log("Delete category:", categoryId);
+                const result = await deleteCategory(categoryId);
+                if (result.success) {
+                    await loadCategories();
+                    // If we were filtering by this category, reset to all
+                    if (currentFilters.category == categoryId) {
+                        handleCategoryFilter('all');
+                    }
+                } else {
+                    alert("Error deleting category: " + result.error);
+                }
+            }
+        });
+    });
+}
 
 // Debug logging
 console.log("Script loaded, waiting for DOM...");
