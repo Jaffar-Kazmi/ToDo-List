@@ -1,3 +1,28 @@
+console.log("Script starting...");
+
+// Force load tasks immediately when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log("DOM loaded, initializing tasks...");
+    
+    // Force load tasks immediately
+    setTimeout(async function() {
+        console.log("Loading tasks after timeout...");
+        await loadTasks();
+        await updateTaskStatistics();
+        await loadCategories();
+    }, 100); // Small delay to ensure DOM is ready
+});
+
+// Also try to load when window is fully loaded
+window.addEventListener('load', function() {
+    console.log("Window loaded, loading tasks...");
+    setTimeout(async function() {
+        await loadTasks();
+        await updateTaskStatistics();
+        await loadCategories();
+    }, 100);
+});
+
 // ============================
 // DOM References
 // ============================
@@ -38,28 +63,48 @@ function escapeHtml(unsafe) {
 
 // TASKS
 async function fetchTasks() {
-  try {
-    console.log("Fetching tasks from API...");
-    const response = await fetch("api/tasks.php");
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    try {
+        console.log("Fetching tasks from API...");
+        const response = await fetch("api/tasks.php", {
+            method: 'GET',
+            credentials: 'same-origin', // Include session cookies
+            headers: {
+                'Cache-Control': 'no-cache'
+            }
+        });
+        
+        console.log("Response status:", response.status);
+        console.log("Response headers:", response.headers);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const text = await response.text();
+        console.log("Raw response text:", text);
+        
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.error("Failed to parse JSON:", text);
+            throw new Error("Invalid JSON response from server");
+        }
+        
+        console.log("Parsed API response:", data);
+        
+        if (data.success) {
+            return data.data || [];
+        } else {
+            console.error("API returned error:", data.error);
+            return [];
+        }
+    } catch (error) {
+        console.error("Error fetching tasks:", error);
+        return [];
     }
-    
-    const data = await response.json();
-    console.log("API response:", data);
-    
-    if (data.success) {
-      return data.data || [];
-    } else {
-      console.error("Error fetching tasks:", data.error);
-      return [];
-    }
-  } catch (error) {
-    console.error("Error fetching tasks:", error);
-    return [];
-  }
 }
+
 
 async function saveTask(taskData) {
   try {
@@ -152,40 +197,39 @@ async function toggleTaskComplete(taskId) {
 
 
 function renderTasks(tasks) {
-  const taskListElement = document.getElementById("task-list");
-  if (!taskListElement) {
-    console.error("Task list element not found");
-    return;
-  }
+    console.log("renderTasks called with:", tasks);
+    
+    const taskListElement = document.getElementById("task-list");
+    if (!taskListElement) {
+        console.error("Task list element not found!");
+        return;
+    }
 
-  console.log("Rendering tasks:", tasks);
-  taskListElement.innerHTML = "";
+    // Clear existing content
+    taskListElement.innerHTML = "";
 
-  if (!tasks || tasks.length === 0) {
-    taskListElement.innerHTML = '<li class="no-tasks">No tasks found</li>';
-    return;
-  }
+    if (!tasks || tasks.length === 0) {
+        console.log("No tasks to render");
+        taskListElement.innerHTML = '<li class="no-tasks">No tasks found</li>';
+        return;
+    }
 
-  tasks.forEach((task) => {
-    const taskElement = document.createElement("li");
-    taskElement.className = `task-item ${task.completed ? "completed" : ""}`;
-    taskElement.innerHTML = `
+    console.log("Rendering", tasks.length, "tasks");
+    
+    tasks.forEach((task, index) => {
+        console.log(`Rendering task ${index}:`, task);
+        
+        const taskElement = document.createElement("li");
+        taskElement.className = `task-item ${task.completed ? "completed" : ""}`;
+        taskElement.innerHTML = `
             <div class="task-content">
                 <h3 class="task-title">${escapeHtml(task.title)}</h3>
-                ${
-                  task.description
-                    ? `<p>${escapeHtml(task.description)}</p>`
-                    : ""
-                }
+                ${task.description ? `<p>${escapeHtml(task.description)}</p>` : ""}
                 <div class="task-meta">
-                    ${
-                      task.due_date
-                        ? `<span><i class="far fa-calendar-alt"></i> ${task.due_date}</span>`
-                        : ""
-                    }
-                    <span class="priority-badge priority-${task.priority_name ? task.priority_name.toLowerCase() : 'medium'}">${
-      task.priority_name || 'Medium'
-    }</span>
+                    ${task.due_date ? `<span><i class="far fa-calendar-alt"></i> ${task.due_date}</span>` : ""}
+                    <span class="priority-badge priority-${task.priority_name ? task.priority_name.toLowerCase() : 'medium'}">
+                        ${task.priority_name || 'Medium'}
+                    </span>
                 </div>
                 ${renderTaskCategories(task.categories)}
             </div>
@@ -202,39 +246,12 @@ function renderTasks(tasks) {
             </div>
         `;
 
-    taskListElement.appendChild(taskElement);
-  });
-
-  // Event listeners for action buttons
-  document.querySelectorAll(".btn-edit").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      const taskId = e.currentTarget.getAttribute("data-task-id");
-      openTaskModal(taskId);
+        taskListElement.appendChild(taskElement);
     });
-  });
 
-  document.querySelectorAll(".btn-delete").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      const taskId = e.currentTarget.getAttribute("data-task-id");
-      if (confirm("Are you sure you want to delete this task?")) {
-        const result = await deleteTask(taskId);
-        if (result.success) {
-          loadTasks();
-          updateTaskStatistics();
-        } else {
-          alert("Error deleting task: " + result.error);
-        }
-      }
-    });
-  });
-
-  // Fixed complete button event listener
-  document.querySelectorAll(".btn-complete").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      const taskId = e.currentTarget.getAttribute("data-task-id");
-      await toggleTaskComplete(taskId);
-    });
-  });
+    // Add event listeners
+    addTaskEventListeners();
+    console.log("Tasks rendered successfully");
 }
 
 // Categories
@@ -449,26 +466,28 @@ function showDashboard() {
 // Loaders
 // ============================
 async function loadTasks() {
-  try {
-    console.log("Loading tasks...");
-    const tasks = await fetchTasks();
-    console.log("Fetched tasks:", tasks);
-    
-    if (tasks) {
-      renderTasks(tasks);
-    } else {
-      const taskListElement = document.getElementById("task-list");
-      if (taskListElement) {
-        taskListElement.innerHTML = '<li class="no-tasks">Error loading tasks</li>';
-      }
+    try {
+        console.log("loadTasks() called");
+        const tasks = await fetchTasks();
+        console.log("Fetched tasks in loadTasks:", tasks);
+        
+        if (Array.isArray(tasks)) {
+            renderTasks(tasks);
+            console.log("Tasks loaded and rendered successfully");
+        } else {
+            console.error("Tasks is not an array:", tasks);
+            const taskListElement = document.getElementById("task-list");
+            if (taskListElement) {
+                taskListElement.innerHTML = '<li class="no-tasks">Error loading tasks</li>';
+            }
+        }
+    } catch (error) {
+        console.error("Error in loadTasks:", error);
+        const taskListElement = document.getElementById("task-list");
+        if (taskListElement) {
+            taskListElement.innerHTML = '<li class="no-tasks">Error loading tasks</li>';
+        }
     }
-  } catch (error) {
-    console.error("Error loading tasks:", error);
-    const taskListElement = document.getElementById("task-list");
-    if (taskListElement) {
-      taskListElement.innerHTML = '<li class="no-tasks">Error loading tasks</li>';
-    }
-  }
 }
 
 async function loadCategories() {
@@ -510,24 +529,37 @@ async function loadCategories() {
 }
 
 async function updateTaskStatistics() {
-  try {
-    console.log("Updating task statistics...");
-    const stats = await fetchStats();
-    console.log("Fetched stats:", stats);
-    
-    const totalElement = document.getElementById("total-tasks");
-    const completedElement = document.getElementById("completed-tasks");
-    const pendingElement = document.getElementById("pending-tasks");
-    const overdueElement = document.getElementById("overdue-tasks");
-    
-    if (totalElement) totalElement.textContent = stats.total || 0;
-    if (completedElement) completedElement.textContent = stats.completed || 0;
-    if (pendingElement) pendingElement.textContent = stats.pending || 0;
-    if (overdueElement) overdueElement.textContent = stats.overdue || 0;
-  } catch (error) {
-    console.error("Error updating statistics:", error);
-  }
+    try {
+        console.log("Updating task statistics...");
+        const stats = await fetchStats();
+        console.log("Fetched stats:", stats);
+        
+        const totalElement = document.getElementById("total-tasks");
+        const completedElement = document.getElementById("completed-tasks");
+        const pendingElement = document.getElementById("pending-tasks");
+        const overdueElement = document.getElementById("overdue-tasks");
+        
+        if (totalElement) {
+            totalElement.textContent = stats.total || 0;
+            console.log("Updated total tasks:", stats.total);
+        }
+        if (completedElement) {
+            completedElement.textContent = stats.completed || 0;
+            console.log("Updated completed tasks:", stats.completed);
+        }
+        if (pendingElement) {
+            pendingElement.textContent = stats.pending || 0;
+            console.log("Updated pending tasks:", stats.pending);
+        }
+        if (overdueElement) {
+            overdueElement.textContent = stats.overdue || 0;
+            console.log("Updated overdue tasks:", stats.overdue);
+        }
+    } catch (error) {
+        console.error("Error updating statistics:", error);
+    }
 }
+
 
 // ============================
 // Event Listeners
@@ -675,6 +707,41 @@ async function initApp() {
   }
 }
 
+function addTaskEventListeners() {
+    // Edit buttons
+    document.querySelectorAll(".btn-edit").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+            const taskId = e.currentTarget.getAttribute("data-task-id");
+            openTaskModal(taskId);
+        });
+    });
+
+    // Delete buttons
+    document.querySelectorAll(".btn-delete").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+            const taskId = e.currentTarget.getAttribute("data-task-id");
+            if (confirm("Are you sure you want to delete this task?")) {
+                const result = await deleteTask(taskId);
+                if (result.success) {
+                    await loadTasks();
+                    await updateTaskStatistics();
+                } else {
+                    alert("Error deleting task: " + result.error);
+                }
+            }
+        });
+    });
+
+    // Complete buttons
+    document.querySelectorAll(".btn-complete").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+            const taskId = e.currentTarget.getAttribute("data-task-id");
+            await toggleTaskComplete(taskId);
+        });
+    });
+}
+
+
 // Debug logging
 console.log("Script loaded, waiting for DOM...");
 
@@ -684,3 +751,13 @@ if (document.readyState === 'loading') {
 } else {
   initApp();
 }
+console.log("Script loaded completely");
+
+// Force one more attempt to load tasks after everything is ready
+setTimeout(function() {
+    console.log("Final attempt to load tasks...");
+    if (document.getElementById("task-list")) {
+        loadTasks();
+        updateTaskStatistics();
+    }
+}, 500);

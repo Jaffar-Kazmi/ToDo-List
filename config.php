@@ -1,4 +1,3 @@
-// config.php - Database connection configuration
 <?php
 // Database configuration
 define('DB_HOST', 'localhost');
