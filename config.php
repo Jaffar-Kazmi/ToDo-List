@@ -1,14 +1,20 @@
 <?php
-// Database configuration
-define('DB_HOST', 'localhost');
-define('DB_USER', 'root');
-define('DB_PASS', 'uraqt');
-define('DB_NAME', 'todo_app');
+require_once __DIR__ . '/vendor/autoload.php';
+
+// Load environment variables - only call this once
+$dotenv = Dotenv\Dotenv::createImmutable(__DIR__);
+$dotenv->load();
+
+// Use $_ENV to fetch values (more reliable than getenv())
+define('DB_HOST', $_ENV['DB_HOST'] ?? 'localhost');
+define('DB_USERNAME', $_ENV['DB_USERNAME'] ?? '');
+define('DB_PASSWORD', $_ENV['DB_PASSWORD'] ?? '');
+define('DB_NAME', $_ENV['DB_DATABASE'] ?? '');
 
 // Create database connection
 function getDbConnection() {
     try {
-        $conn = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME, DB_USER, DB_PASS);
+        $conn = new PDO("mysql:unix_socket=/var/run/mysqld/mysqld.sock;dbname=" . DB_NAME, DB_USERNAME, DB_PASSWORD);
         $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
         return $conn;
     } catch(PDOException $e) {

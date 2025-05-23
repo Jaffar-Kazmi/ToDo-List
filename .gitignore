@@ -1,0 +1,71 @@
+# Environment files
+.env
+*.env
+.env.local
+.env.production
+
+# Composer dependencies
+/vendor/
+composer.phar
+
+# Composer lock file (optional - see note below)
+# composer.lock
+
+# Configuration files with sensitive data
+config.php
+
+# Log files
+*.log
+logs/
+error.log
+access.log
+
+# Cache directories
+cache/
+tmp/
+temp/
+
+# Session files
+sessions/
+*.sess
+
+# Database files (if using SQLite)
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Upload directories (if you have file uploads)
+uploads/
+files/
+
+# Node.js (if you add any npm packages later)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# PHP specific
+*.php~
+.phpunit.result.cache

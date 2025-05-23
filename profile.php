@@ -10,20 +10,10 @@ $stmt = $conn->prepare("SELECT * FROM users WHERE user_id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
-// Get user statistics
-$statsStmt = $conn->prepare("
-    SELECT 
-        COUNT(*) as total_tasks,
-        SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) as completed_tasks,
-        SUM(CASE WHEN completed = 0 THEN 1 ELSE 0 END) as pending_tasks,
-        SUM(CASE WHEN due_date < CURDATE() AND completed = 0 THEN 1 ELSE 0 END) as overdue_tasks
-    FROM tasks 
-    WHERE user_id = ?
-");
-$statsStmt->execute([$_SESSION['user_id']]);
-$stats = $statsStmt->fetch();
+// Remove the direct stats query - we'll fetch via JavaScript instead
+// $statsStmt = $conn->prepare("...");
 
-// Handle form submission
+// Handle form submission (keep existing form handling code)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['update_profile'])) {
         $email = trim($_POST['email']);
@@ -254,19 +244,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 0.9rem;
             opacity: 0.8;
         }
+        
+        /* Loading state for stats */
+        .stat-loading {
+            opacity: 0.6;
+        }
     </style>
 </head>
 <body>
-  <header>
-            <div class="navbar container">
-                <h1>Task Manager</h1>
-                <ul class="nav-menu">
-                    <li><a href="index.php" class="active">Dashboard</a></li>
-                    <li><a href="profile.php">Profile</a></li>
-                    <li><a href="logout.php">Logout</a></li>
-                </ul>
-            </div>
-        </header>
+    <header>
+        <div class="navbar container">
+            <h1>Task Manager</h1>
+            <ul class="nav-menu">
+                <li><a href="index.php">Dashboard</a></li>
+                <li><a href="profile.php" class="active">Profile</a></li>
+                <li><a href="logout.php">Logout</a></li>
+            </ul>
+        </div>
+    </header>
     
     <div class="profile-container">
         <div class="profile-header">
@@ -278,20 +273,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         
         <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-number total"><?= $stats['total_tasks'] ?></div>
+            <div class="stat-card stat-loading">
+                <div class="stat-number total" id="total-tasks">Loading...</div>
                 <div class="stat-label">Total Tasks</div>
             </div>
-            <div class="stat-card">
-                <div class="stat-number completed"><?= $stats['completed_tasks'] ?></div>
+            <div class="stat-card stat-loading">
+                <div class="stat-number completed" id="completed-tasks">Loading...</div>
                 <div class="stat-label">Completed</div>
             </div>
-            <div class="stat-card">
-                <div class="stat-number pending"><?= $stats['pending_tasks'] ?></div>
+            <div class="stat-card stat-loading">
+                <div class="stat-number pending" id="pending-tasks">Loading...</div>
                 <div class="stat-label">Pending</div>
             </div>
-            <div class="stat-card">
-                <div class="stat-number overdue"><?= $stats['overdue_tasks'] ?></div>
+            <div class="stat-card stat-loading">
+                <div class="stat-number overdue" id="overdue-tasks">Loading...</div>
                 <div class="stat-label">Overdue</div>
             </div>
         </div>
@@ -344,6 +339,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
     
     <script>
+        // Load stats using the same API as dashboard
+        async function loadStats() {
+            try {
+                const response = await fetch('api/stats.php');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const stats = result.data;
+                    
+                    // Update the stat numbers
+                    document.getElementById('total-tasks').textContent = stats.total;
+                    document.getElementById('completed-tasks').textContent = stats.completed;
+                    document.getElementById('pending-tasks').textContent = stats.pending;
+                    document.getElementById('overdue-tasks').textContent = stats.overdue;
+                    
+                    // Remove loading state
+                    document.querySelectorAll('.stat-card').forEach(card => {
+                        card.classList.remove('stat-loading');
+                    });
+                } else {
+                    throw new Error(result.error || 'Failed to load stats');
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+                
+                // Show error state
+                document.querySelectorAll('.stat-number').forEach(el => {
+                    el.textContent = 'Error';
+                });
+                
+                document.querySelectorAll('.stat-card').forEach(card => {
+                    card.classList.remove('stat-loading');
+                });
+            }
+        }
+        
         function togglePasswordVisibility() {
             const checkbox = document.getElementById('show_passwords');
             const passwordFields = ['current_password', 'new_password', 'confirm_password'];
@@ -363,6 +394,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }, 150);
             });
         });
+        
+        // Load stats when page loads
+        document.addEventListener('DOMContentLoaded', loadStats);
     </script>
 </body>
 </html>
